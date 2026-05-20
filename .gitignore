@@ -1,0 +1,19 @@
+# Docker 镜像
+*.tar
+*.tar.gz
+*.tar.gz.part
+
+# 编译产物
+__pycache__/
+*.pyc
+*.pyo
+build/
+install/
+log/
+
+# 源码目录（体积太大，不上传）
+cyberdog_sim_src/
+
+# PDF/Word文档（可选，如需上传删除这几行）
+# *.pdf
+# *.docx
