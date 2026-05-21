@@ -9,7 +9,10 @@ import cv2
 import numpy as np
 import time
 import threading
-from utils.cyberdog_lcm import MODE_PASSIVE
+import sys
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+from utils.camera_subscriber import CameraSubscriber
 
 VX_APPROACH  = 0.25
 VX_KICK      = 0.8
@@ -28,33 +31,14 @@ class StageKick:
 
     def __init__(self, ctrl):
         self.ctrl = ctrl
-        self._cap = None
-        self._frame = None
-        self._frame_lock = threading.Lock()
-        self._running = False
+        self._cam = CameraSubscriber('/rgb_camera/image_raw')
+        self._cam.start()
         self._sub_state = self.S_FIND_BALL
         self._timer = 0.0
         self._lost_count = 0
 
-    def _start_camera(self):
-        self._cap = cv2.VideoCapture(0)
-        self._cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-        self._cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-        self._running = True
-
-        def grab():
-            while self._running:
-                ret, frame = self._cap.read()
-                if ret:
-                    with self._frame_lock:
-                        self._frame = frame
-                time.sleep(0.033)
-
-        threading.Thread(target=grab, daemon=True).start()
-
     def _get_frame(self):
-        with self._frame_lock:
-            return self._frame.copy() if self._frame is not None else None
+        return self._cam.get_frame()
 
     def _detect_football(self, frame):
         """检测足球（白色圆形）"""
@@ -78,9 +62,6 @@ class StageKick:
         return M['m10'] / M['m00'], M['m01'] / M['m00'], area
 
     def step(self, current_y):
-        if self._cap is None:
-            self._start_camera()
-
         frame = self._get_frame()
         if frame is None:
             self.ctrl.move(vx=0.1)
@@ -144,8 +125,6 @@ class StageKick:
         self.ctrl.lie_down()
 
     def cleanup(self):
-        self._running = False
-        if self._cap:
-            self._cap.release()
+        self._cam.stop()
         self.finish()
         print("[赛段六] 结束")

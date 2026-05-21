@@ -92,6 +92,13 @@
                 <ros>
                     <remapping>~/image_raw:=image_raw</remapping>
                     <remapping>~/camera_info:=camera_info</remapping>
+                    <qos>
+                        <sensor_data>
+                            <publisher>
+                                <reliability>best_effort</reliability>
+                            </publisher>
+                        </sensor_data>
+                    </qos>
                 </ros>
                 <camera_name>rgb_camera</camera_name>
                 <frame_name>RGB_camera_link</frame_name>
@@ -122,6 +129,13 @@
                 <ros>
                     <remapping>~/image_raw:=image</remapping>
                     <remapping>~/camera_info:=ai_camera_info</remapping>
+                    <qos>
+                        <sensor_data>
+                            <publisher>
+                                <reliability>best_effort</reliability>
+                            </publisher>
+                        </sensor_data>
+                    </qos>
                 </ros>
                 <camera_name>ai_camera</camera_name>
                 <frame_name>AI_camera_link</frame_name>

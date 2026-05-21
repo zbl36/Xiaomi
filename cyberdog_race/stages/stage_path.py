@@ -7,6 +7,10 @@ import cv2
 import numpy as np
 import threading
 import time
+import sys
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+from utils.camera_subscriber import CameraSubscriber
 
 # 黄线HSV范围
 YELLOW_LOW  = np.array([20, 100, 100])
@@ -40,33 +44,12 @@ class StagePath:
         self._integral = 0.0
         self._last_error = 0.0
 
-        # 摄像头
-        self._cap = None
-        self._frame = None
-        self._frame_lock = threading.Lock()
-        self._cam_thread = None
-        self._running = False
-
-    def _start_camera(self):
-        self._cap = cv2.VideoCapture(0)
-        self._cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-        self._cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-        self._running = True
-
-        def grab():
-            while self._running:
-                ret, frame = self._cap.read()
-                if ret:
-                    with self._frame_lock:
-                        self._frame = frame
-                time.sleep(0.033)
-
-        self._cam_thread = threading.Thread(target=grab, daemon=True)
-        self._cam_thread.start()
+        # 相机（使用ROS2 topic）
+        self._cam = CameraSubscriber('/rgb_camera/image_raw')
+        self._cam.start()
 
     def _get_frame(self):
-        with self._frame_lock:
-            return self._frame.copy() if self._frame is not None else None
+        return self._cam.get_frame()
 
     def _detect_lane_error(self, frame):
         """
@@ -128,9 +111,6 @@ class StagePath:
         主循环调用，每帧执行一次
         返回 True 表示本赛段完成
         """
-        if self._cap is None:
-            self._start_camera()
-
         frame = self._get_frame()
         if frame is None:
             # 摄像头还没准备好，先直行
@@ -149,8 +129,6 @@ class StagePath:
         return False  # 由主状态机根据Y坐标判断结束
 
     def cleanup(self):
-        self._running = False
-        if self._cap:
-            self._cap.release()
+        self._cam.stop()
         self.ctrl.stop()
         print(f"[{self.mode}] 赛段结束，停止")

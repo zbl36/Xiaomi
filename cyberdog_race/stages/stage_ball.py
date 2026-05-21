@@ -15,6 +15,10 @@ import cv2
 import numpy as np
 import time
 import threading
+import sys
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+from utils.camera_subscriber import CameraSubscriber
 
 # 橙色HSV范围
 ORANGE_LOW  = np.array([8,  150, 150])
@@ -33,16 +37,17 @@ HIT_AREA_THRESHOLD = 3000  # 球面积超过此值认为已接近
 class StageBall:
     def __init__(self, ctrl):
         self.ctrl = ctrl
-        self._cap = None
-        self._frame = None
-        self._frame_lock = threading.Lock()
-        self._running = False
+        self._cam = CameraSubscriber('/rgb_camera/image_raw')
+        self._cam.start()
 
         # 状态
-        self._sub_state = 'SCAN'   # SCAN / ALIGN / HIT / BACK / DONE
-        self._hit_count = 0        # 已撞击球数
+        self._sub_state = 'SCAN'
+        self._hit_count = 0
         self._target_lost_count = 0
         self._hit_timer = 0.0
+
+    def _get_frame(self):
+        return self._cam.get_frame()
 
     def _start_camera(self):
         self._cap = cv2.VideoCapture(0)
@@ -93,9 +98,6 @@ class StageBall:
         return cx, cy, area
 
     def step(self, current_y):
-        if self._cap is None:
-            self._start_camera()
-
         frame = self._get_frame()
         if frame is None:
             self.ctrl.move(vx=0.1)
@@ -163,8 +165,6 @@ class StageBall:
         return False
 
     def cleanup(self):
-        self._running = False
-        if self._cap:
-            self._cap.release()
+        self._cam.stop()
         self.ctrl.stop()
         print("[赛段二] 结束")

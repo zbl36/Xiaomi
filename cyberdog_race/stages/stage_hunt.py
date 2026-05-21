@@ -15,6 +15,10 @@ import numpy as np
 import subprocess
 import time
 import threading
+import sys
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+from utils.camera_subscriber import CameraSubscriber
 
 # 颜色范围
 ORANGE_LOW   = np.array([8,  150, 150])
@@ -53,10 +57,8 @@ class StageHunt:
 
     def __init__(self, ctrl):
         self.ctrl = ctrl
-        self._cap = None
-        self._frame = None
-        self._frame_lock = threading.Lock()
-        self._running = False
+        self._cam = CameraSubscriber('/rgb_camera/image_raw')
+        self._cam.start()
 
         self._sub_state = self.S_ENTER
         self._channel = 0          # 当前探索的通道编号 1/2/3
@@ -64,25 +66,8 @@ class StageHunt:
         self._timer = 0.0
         self._interact_target = None
 
-    def _start_camera(self):
-        self._cap = cv2.VideoCapture(0)
-        self._cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-        self._cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-        self._running = True
-
-        def grab():
-            while self._running:
-                ret, frame = self._cap.read()
-                if ret:
-                    with self._frame_lock:
-                        self._frame = frame
-                time.sleep(0.033)
-
-        threading.Thread(target=grab, daemon=True).start()
-
     def _get_frame(self):
-        with self._frame_lock:
-            return self._frame.copy() if self._frame is not None else None
+        return self._cam.get_frame()
 
     def _detect_orange_ball(self, frame):
         hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
@@ -151,9 +136,6 @@ class StageHunt:
         return aligned, result
 
     def step(self, current_y):
-        if self._cap is None:
-            self._start_camera()
-
         frame = self._get_frame()
         if frame is None:
             self.ctrl.move(vx=VX_EXPLORE)
@@ -334,8 +316,6 @@ class StageHunt:
         return True
 
     def cleanup(self):
-        self._running = False
-        if self._cap:
-            self._cap.release()
+        self._cam.stop()
         self.ctrl.stop()
         print("[赛段四] 结束")
