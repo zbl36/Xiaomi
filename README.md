@@ -62,6 +62,8 @@ sudo docker cp gazebo.xacro cyberdog:/home/cyberdog_sim/src/cyberdog_simulator/c
 # 应用比赛代码
 sudo docker cp cyberdog_race cyberdog:/home/cyberdog_sim/cyberdog_race
 sudo docker cp cyberdog_control.py cyberdog:/home/cyberdog_sim/cyberdog_control.py
+sudo docker cp view_camera.py cyberdog:/home/cyberdog_sim/view_camera.py
+sudo docker cp camera_relay.py cyberdog:/home/cyberdog_sim/camera_relay.py
 ```
 
 ### 第六步：容器内安装依赖并重新编译
@@ -81,7 +83,7 @@ source ~/.bashrc
 
 # 重新编译（应用相机配置）
 cd /home/cyberdog_sim
-colcon build --packages-select cyberdog_gazebo --merge-install
+colcon build --packages-select cyberdog_description --merge-install
 source install/setup.bash
 ```
 
@@ -99,28 +101,40 @@ sudo docker commit cyberdog cyberdog_sim:v2026_save
 ### 启动仿真
 
 ```bash
-# 1. 授权GUI
+# 保存当前进度（可选）
+sudo docker commit cyberdog cyberdog_sim:v2026_save
+
+# 授权GUI
 xhost +
 
-# 2. 启动容器（如提示名称冲突先执行 sudo docker rm cyberdog）
+# 如提示名称冲突先执行
+sudo docker rm cyberdog
+
+# 启动容器
 sudo docker run -it --name cyberdog --shm-size="1g" --privileged=true \
   -e DISPLAY=$DISPLAY \
   -v /tmp/.X11-unix:/tmp/.X11-unix \
   -v ~/Xiaomi/race.world:/home/cyberdog_sim/src/cyberdog_simulator/cyberdog_gazebo/world/race.world \
   cyberdog_sim:v2026_save
 
-# 3. 容器内启动仿真
+# 容器内启动仿真
 cd /home/cyberdog_sim
 python3 src/cyberdog_simulator/cyberdog_gazebo/script/launchsim.py
 ```
 
-### 手动键盘控制机器狗
-
-新开终端进入容器：
+### 新开容器终端
 
 ```bash
 sudo docker exec -it cyberdog bash
-cd /home/cyberdog_sim
+source /opt/ros/galactic/setup.bash
+source /home/cyberdog_sim/install/setup.bash
+```
+
+### 手动键盘控制机器狗
+
+```bash
+sudo docker exec -it cyberdog bash
+cd /home/cyberdog_sim/
 python3.8 cyberdog_control.py
 ```
 
@@ -137,6 +151,18 @@ python3.8 cyberdog_control.py
 | 空格 | 停止 |
 | `0` | 趴下 |
 | `q` | 退出 |
+
+### 查看相机画面
+
+```bash
+sudo docker exec -it cyberdog bash
+cd /home/cyberdog_sim
+python3.8 view_camera.py
+```
+
+打开后在下拉菜单选择：
+- `/camera/image_rgb` — RGB 前置相机
+- `/camera/image_ai` — AI 相机
 
 ### 运行比赛自动程序
 
@@ -160,7 +186,10 @@ sudo docker commit cyberdog cyberdog_sim:v2026_save
 |-----------|------|
 | `cyberdog_race/` | 比赛自动控制代码（状态机+各赛段逻辑） |
 | `cyberdog_control.py` | 手动键盘控制脚本 |
+| `view_camera.py` | 相机画面查看工具（relay+rqt合一） |
+| `camera_relay.py` | 相机QoS转发节点 |
 | `gazebo.xacro` | 添加了RGB/AI相机插件的仿真配置 |
 | `race.world` | 2026比赛赛道仿真场景 |
 | `docs/` | 比赛规则、赛题、技术文档、比赛方案 |
 | `code and readme/` | 官方示例代码（basic_motion等） |
+| `CHANGELOG.md` | 更新日志 |
