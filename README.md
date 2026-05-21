@@ -2,11 +2,14 @@
 
 2026年全国大学生计算机系统能力大赛 · 智能系统创新设计赛（小米杯）
 
+一键更换系统源以及一键安装docker指令：
+wget http://fishros.com/install -O fishros && . fishros
+
 ---
 
-## 队友环境搭建（从零开始）
+## 环境搭建
 
-### 第一步：安装 Docker
+### 第一步：安装 Docker（在ubuntu里）
 
 ```bash
 sudo apt update
