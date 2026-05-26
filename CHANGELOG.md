@@ -2,6 +2,44 @@
 
 ---
 
+## 2026-05-26
+
+### 新增
+- `test_lane_follow.py`：黄线跟踪独立测试脚本
+  - 容器路径：`/home/cyberdog_sim/test_lane_follow.py`
+  - 自动完成站立流程，按 `s` 开始跟踪，按 `x` 停止，按 `q` 退出
+  - 实时显示黄线检测结果（赛道中心线、误差值、mask）
+  - PID 参数可在脚本顶部调整：`Kp/Ki/Kd`
+
+- `record_video.py`：相机录制工具
+  - 容器路径：`/home/cyberdog_sim/record_video.py`
+  - 支持录制 mp4 视频并拆帧为 jpg 图片，用于 YOLOv8 训练数据采集
+
+- `cyberdog2-ctrl-user-parameters.yaml`：运控参数配置
+  - 容器路径：`/home/cyberdog_sim/src/cyberdog_locomotion/common/config/cyberdog2-ctrl-user-parameters.yaml`
+  - 修改：`rpy_min` pitch 限制从 `-0.25` 扩大到 `-0.52`，`step_height_max` 从 `0.06` 改为 `0.12`
+
+- `cyberdog_race/gaits/lane_follow_gait.toml`：黄线跟踪步态参数文件
+
+- `cyberdog_locomotion/`：运控源码（含修改）
+  - `control/src/convex_mpc/convex_mpc_loco_gaits.cpp`：
+    - `SetDefaultParams()` 中 `rpy_cmd_max_` 从 `0.1` 扩大到 `0.35`（扩大前倾范围）
+    - 注释掉速度对 pitch 的压缩逻辑（4处），行走时 pitch 不再被速度缩减
+
+### 修改
+- `cyberdog_control.py`
+  - 新增 `p` 键：前倾低头（pitch=0.20），移动时保持前倾
+  - 新增 `u` 键：恢复正常姿态
+  - 退出时不再发送趴下指令，保持当前站立状态
+  - keepalive 线程：前倾模式下自动发送小速度保持行走模式
+
+- `cyberdog_race/utils/cyberdog_lcm.py`
+  - 新增 `move_lowhead()` 方法：前倾行走（pitch=0.20）
+  - 完善 mode 定义注释
+
+- `cyberdog_race/stages/stage_path.py`
+  - 行走时使用 `move_lowhead()` 替代普通 `move()`
+
 ## 2026-05-21
 
 ### 新增

@@ -121,10 +121,9 @@ class StagePath:
         vyaw = -self._pid(error)
         vyaw = max(-0.8, min(0.8, vyaw))  # 限幅
 
-        self.ctrl.move(
+        self.ctrl.move_lowhead(
             vx=self.vx,
             vyaw=vyaw,
-            step_height=self.step_h
         )
         return False  # 由主状态机根据Y坐标判断结束
 

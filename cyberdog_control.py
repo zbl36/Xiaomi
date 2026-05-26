@@ -29,9 +29,12 @@ lc = lcm.LCM(LCM_URL)
 msg = robot_control_cmd_lcmt.robot_control_cmd_lcmt()
 life_count = 0
 lock = threading.Lock()
+current_pitch = 0.0  # 当前pitch角度，移动时保持
 
-def send_cmd(mode, gait_id=0, vx=0.0, vy=0.0, vyaw=0.0, duration=500):
-    global life_count
+def send_cmd(mode, gait_id=0, vx=0.0, vy=0.0, vyaw=0.0, duration=500, pitch=None):
+    global life_count, current_pitch
+    # pitch=None 时使用当前保持的pitch值
+    p = current_pitch if pitch is None else pitch
     with lock:
         life_count = (life_count + 1) % 127  # int8_t 范围限制
         msg.mode        = mode
@@ -41,8 +44,7 @@ def send_cmd(mode, gait_id=0, vx=0.0, vy=0.0, vyaw=0.0, duration=500):
         msg.contact     = 0
         msg.value       = 0
         msg.vel_des     = [vx, vy, vyaw]
-        msg.rpy_des     = [0.0, 0.0, 0.0]
-        msg.pos_des     = [0.0, 0.0, 0.0]
+        msg.rpy_des     = [0.0, p, 0.0]
         msg.acc_des     = [0.0] * 6
         msg.ctrl_point  = [0.0] * 3
         msg.foot_pose   = [0.0] * 6
@@ -52,6 +54,13 @@ def send_cmd(mode, gait_id=0, vx=0.0, vy=0.0, vyaw=0.0, duration=500):
 def keep_alive(stop_event):
     while not stop_event.is_set():
         with lock:
+            msg.rpy_des = [0.0, current_pitch, 0.0]
+            # 前倾模式下强制保持极小速度，防止控制器切回stand归零pitch
+            if current_pitch > 0.0:
+                msg.mode = MODE_LOCOMOTION
+                msg.gait_id = GAIT_TROT
+                if msg.vel_des[0] == 0.0 and msg.vel_des[1] == 0.0 and msg.vel_des[2] == 0.0:
+                    msg.vel_des = [0.05, 0.0, 0.0]
             lc.publish("robot_control_cmd", msg.encode())
         time.sleep(0.1)
 
@@ -93,6 +102,7 @@ def print_help():
 ║                                        ║
 ║  推荐顺序：r → t → y → 移动           ║
 ║    h  - 显示帮助    q  - 退出          ║
+║    p  - 低头        u  - 恢复姿态      ║
 ╚════════════════════════════════════════╝
 """)
 
@@ -133,7 +143,7 @@ def main():
                 print("\r>> 站立                          ")
 
             elif key == 'y':
-                send_cmd(MODE_LOCOMOTION, gait_id=GAIT_TROT, duration=500)
+                send_cmd(MODE_LOCOMOTION, gait_id=GAIT_TROT, duration=500, pitch=current_pitch)
                 current_mode = MODE_LOCOMOTION
                 print("\r>> 行走模式（小跑）               ")
 
@@ -144,42 +154,55 @@ def main():
 
             # 移动控制
             elif key in ('w', '\x1b[A'):  # w 或 ↑
-                send_cmd(MODE_LOCOMOTION, GAIT_TROT, vx=VX)
+                send_cmd(MODE_LOCOMOTION, GAIT_TROT, vx=VX, pitch=current_pitch)
                 print(f"\r>> 前进 {VX} m/s                 ", end='', flush=True)
 
             elif key in ('s', '\x1b[B'):  # s 或 ↓
-                send_cmd(MODE_LOCOMOTION, GAIT_TROT, vx=-VX)
+                send_cmd(MODE_LOCOMOTION, GAIT_TROT, vx=-VX, pitch=current_pitch)
                 print(f"\r>> 后退 {VX} m/s                 ", end='', flush=True)
 
             elif key in ('a', '\x1b[D'):  # a 或 ←  → 左转
-                send_cmd(MODE_LOCOMOTION, GAIT_TROT, vyaw=VYAW)
+                send_cmd(MODE_LOCOMOTION, GAIT_TROT, vyaw=VYAW, pitch=current_pitch)
                 print(f"\r>> 左转 {VYAW} rad/s             ", end='', flush=True)
 
             elif key in ('d', '\x1b[C'):  # d 或 →  → 右转
-                send_cmd(MODE_LOCOMOTION, GAIT_TROT, vyaw=-VYAW)
+                send_cmd(MODE_LOCOMOTION, GAIT_TROT, vyaw=-VYAW, pitch=current_pitch)
                 print(f"\r>> 右转 {VYAW} rad/s             ", end='', flush=True)
 
             elif key == 'z':  # 左平移
-                send_cmd(MODE_LOCOMOTION, GAIT_TROT, vy=VY)
+                send_cmd(MODE_LOCOMOTION, GAIT_TROT, vy=VY, pitch=current_pitch)
                 print(f"\r>> 左平移 {VY} m/s               ", end='', flush=True)
 
             elif key == 'c':  # 右平移
-                send_cmd(MODE_LOCOMOTION, GAIT_TROT, vy=-VY)
+                send_cmd(MODE_LOCOMOTION, GAIT_TROT, vy=-VY, pitch=current_pitch)
                 print(f"\r>> 右平移 {VY} m/s               ", end='', flush=True)
 
             elif key == ' ':  # 停止
-                send_cmd(MODE_LOCOMOTION, GAIT_TROT, vx=0.0, vy=0.0, vyaw=0.0)
-                print("\r>> 停止                          ", end='', flush=True)
+                send_cmd(MODE_LOCOMOTION, GAIT_TROT, vx=0.0, vy=0.0, vyaw=0.0, pitch=current_pitch)
+                print("\r>> 停止（保持姿态）               ", end='', flush=True)
+
+            elif key == 'u':  # 恢复正常姿态
+                current_pitch = 0.0
+                send_cmd(MODE_LOCOMOTION, GAIT_TROT, vx=0.0, vy=0.0, vyaw=0.0, pitch=current_pitch)
+                print("\r>> 恢复正常姿态                  ", end='', flush=True)
 
             elif key == 'h':
                 print_help()
 
+            elif key == 'p':  # 低头（pitch前倾，正值为前倾）
+                current_pitch = 0.20
+                send_cmd(MODE_LOCOMOTION, gait_id=GAIT_TROT, duration=500, pitch=current_pitch)
+                print("\r>> 低头 pitch=0.20（移动时保持）   ", end='', flush=True)
+
+            elif key == 'u':  # 恢复正常姿态
+                current_pitch = 0.0
+                send_cmd(MODE_STAND, duration=500, pitch=current_pitch)
+                print("\r>> 恢复正常姿态                  ", end='', flush=True)
+
     except Exception as e:
         print(f"\n错误: {e}")
     finally:
-        print("\n退出，发送趴下指令...")
-        send_cmd(MODE_PASSIVE)
-        time.sleep(0.5)
+        print("\n退出...")
         stop_event.set()
 
 if __name__ == '__main__':

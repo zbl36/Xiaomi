@@ -146,6 +146,27 @@ class CyberdogController:
                   step_height=step_height,
                   body_height=body_height)
 
+    def move_lowhead(self, vx=0.0, vy=0.0, vyaw=0.0):
+        """
+        低头行走：机身前倾约15度，方便相机看到近处黄线
+        用于赛段一/三黄线跟踪
+        """
+        with self._lock:
+            self.msg.mode        = MODE_LOCOMOTION
+            self.msg.gait_id     = GAIT_TROT
+            self.msg.life_count  = self._next_life()
+            self.msg.duration    = 500
+            self.msg.contact     = 0
+            self.msg.value       = 0
+            self.msg.vel_des     = [vx, vy, vyaw]
+            self.msg.rpy_des     = [0.0, -0.20, 0.0]  # pitch前倾约11度（负值为前倾）
+            self.msg.pos_des     = [0.0, 0.0, 0.0]
+            self.msg.acc_des     = [0.0] * 6
+            self.msg.ctrl_point  = [0.0] * 3
+            self.msg.foot_pose   = [0.0] * 6
+            self.msg.step_height = [0.08, 0.08]
+            self.lc_s.publish("robot_control_cmd", self.msg.encode())
+
     def stop(self):
         self.send(MODE_LOCOMOTION, GAIT_TROT,
                   vx=0.0, vy=0.0, vyaw=0.0)
