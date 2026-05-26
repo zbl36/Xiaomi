@@ -1,0 +1,2 @@
+把四个文件复制到/home/cyberdog_sim/loco_hl_example/customized_gait下，替换原有main.py
+执行python3 main.py lowposture_forward
