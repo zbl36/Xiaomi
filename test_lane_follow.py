@@ -24,7 +24,7 @@ from sensor_msgs.msg import Image
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
 
 # ── 黄线 HSV 范围 ──────────────────────────────────────────
-YELLOW_LOW  = np.array([20, 100, 100])
+YELLOW_LOW  = np.array([25, 80,  200])
 YELLOW_HIGH = np.array([35, 255, 255])
 
 # ── PID 参数（可调）────────────────────────────────────────
@@ -33,7 +33,7 @@ Ki = 0.0001  # 积分
 Kd = 0.002   # 微分
 
 # ── 运动参数 ───────────────────────────────────────────────
-VX          = 0.25   # 前进速度
+VX          = 0.15   # 前进速度（调试时用慢速）
 PITCH       = 0.20   # 前倾角度
 VYAW_MAX    = 0.8    # 最大转向速度
 
@@ -95,10 +95,12 @@ def detect_lane(frame):
     """
     返回 (error, debug_frame)
     error > 0 偏右，error < 0 偏左
+    只取画面最下方 1/3，过滤远处其他赛道线
     """
     h, w = frame.shape[:2]
-    # 只看下半部分
-    roi = frame[h // 2:, :]
+    # 只看最下面 1/3，距离机器狗最近的黄线最可靠
+    roi_start = h * 2 // 3
+    roi = frame[roi_start:, :]
 
     hsv  = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
     mask = cv2.inRange(hsv, YELLOW_LOW, YELLOW_HIGH)
@@ -120,23 +122,32 @@ def detect_lane(frame):
     if left_cx is None and right_cx is None:
         cv2.putText(debug, 'NO LINE', (10, 30),
                     cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
-        return 0.0, debug
+        return 0.0, debug, False
 
     if left_cx is None:
-        lane_cx = w // 2 + right_cx - w * 0.25
+        # 只看到右线，赛道中心在右线左边约半个赛道宽
+        lane_cx = (w // 2 + right_cx) - w * 0.25
     elif right_cx is None:
+        # 只看到左线，赛道中心在左线右边约半个赛道宽
         lane_cx = left_cx + w * 0.25
     else:
+        # 两侧都看到，取中间
         lane_cx = (left_cx + (w // 2 + right_cx)) / 2.0
 
     error = lane_cx - w / 2.0
+    # error > 0：赛道中心在图像右侧，需要右转（vyaw 负值）
+    # error < 0：赛道中心在图像左侧，需要左转（vyaw 正值）
+    # 所以 vyaw = -error * Kp（负号）... 但实测 vyaw=正值是左转
+    # 因此 vyaw = error * Kp（正号，err<0时vyaw<0右转... 不对）
+    # 重新梳理：err<0赛道偏左→机器狗偏右→需要右转→vyaw负值
+    # vyaw = err * Kp：err=-59 → vyaw=-0.24（右转）✓
 
     # 画辅助线
     cv2.line(debug, (int(lane_cx), 0), (int(lane_cx), roi.shape[0]), (0, 255, 0), 2)
     cv2.line(debug, (w // 2, 0), (w // 2, roi.shape[0]), (255, 0, 0), 1)
     cv2.putText(debug, f'err={error:.1f}', (10, 30),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
-    return error, debug
+    return error, debug, True
 
 
 def _cx(mask):
@@ -153,35 +164,55 @@ def _cx(mask):
 # ── 主循环 ─────────────────────────────────────────────────
 def startup():
     """启动流程：恢复站立 → 进入行走模式"""
+    global life
     print("启动中：恢复站立...")
-    with lock:
-        life_count = 1
-        msg.mode = 12  # recovery
-        msg.gait_id = 0
-        msg.life_count = life_count
-        msg.duration = 2000
-        msg.vel_des = [0.0, 0.0, 0.0]
-        msg.rpy_des = [0.0, 0.0, 0.0]
-        msg.pos_des = [0.0, 0.0, 0.0]
-        msg.acc_des = [0.0] * 6
-        msg.ctrl_point = [0.0] * 3
-        msg.foot_pose = [0.0] * 6
-        msg.step_height = [0.08, 0.08]
-        msg.contact = 0
-        msg.value = 0
-        lc.publish("robot_control_cmd", msg.encode())
-    time.sleep(2.5)
+    for i in range(20):  # 持续发送2秒
+        with lock:
+            life = (life + 1) % 127
+            msg.mode        = 12
+            msg.gait_id     = 0
+            msg.life_count  = life
+            msg.duration    = 2000
+            msg.vel_des     = [0.0, 0.0, 0.0]
+            msg.rpy_des     = [0.0, 0.0, 0.0]
+            msg.pos_des     = [0.0, 0.0, 0.0]
+            msg.acc_des     = [0.0] * 6
+            msg.ctrl_point  = [0.0] * 3
+            msg.foot_pose   = [0.0] * 6
+            msg.step_height = [0.08, 0.08]
+            msg.contact     = 0
+            msg.value       = 0
+            lc.publish("robot_control_cmd", msg.encode())
+        time.sleep(0.1)
 
     print("进入前倾行走模式...")
     send(vx=0.0, vyaw=0.0)
     time.sleep(0.5)
     print("就绪，按 s 开始跟踪\n")
+
+
+def keepalive(stop_event):
+    """持续发送当前指令，防止控制程序超时"""
+    while not stop_event.is_set():
+        with lock:
+            lc.publish("robot_control_cmd", msg.encode())
+        time.sleep(0.05)  # 20Hz 保活
+
+
+def main():
     rclpy.init()
+
+    # 相机和站立并行初始化
     cam = CamNode()
     spin_t = threading.Thread(target=lambda: rclpy.spin(cam), daemon=True)
     spin_t.start()
 
-    # 自动站立进入行走模式
+    # 启动保活线程
+    stop_event = threading.Event()
+    ka_thread = threading.Thread(target=keepalive, args=(stop_event,), daemon=True)
+    ka_thread.start()
+
+    # 站立（和相机初始化并行）
     startup()
 
     integral   = 0.0
@@ -194,24 +225,33 @@ def startup():
     print("  q - 退出")
     print(f"  PID: Kp={Kp} Ki={Ki} Kd={Kd}  VX={VX}")
 
+    print("等待相机图像...")
+    while cam.get() is None:
+        time.sleep(0.1)
+    print("相机就绪\n")
+
     while True:
         frame = cam.get()
         if frame is None:
             time.sleep(0.05)
             continue
 
-        error, debug = detect_lane(frame)
+        error, debug, line_detected = detect_lane(frame)
 
         # PID
         integral   += error
         integral    = max(-300, min(300, integral))
         derivative  = error - last_error
         last_error  = error
-        vyaw        = -(Kp * error + Ki * integral + Kd * derivative)
+        vyaw        = Kp * error + Ki * integral + Kd * derivative
         vyaw        = max(-VYAW_MAX, min(VYAW_MAX, vyaw))
 
         if running:
-            send(vx=VX, vyaw=vyaw)
+            if not line_detected:
+                # 看不到黄线：停止前进，原地慢转寻找黄线
+                send(vx=0.0, vyaw=0.0)
+            else:
+                send(vx=VX, vyaw=vyaw)
 
         # 显示
         cv2.putText(debug, 'RUNNING' if running else 'STOPPED',
@@ -220,7 +260,7 @@ def startup():
                     (0, 255, 0) if running else (0, 0, 255), 2)
         cv2.imshow('lane follow', debug)
 
-        key = cv2.waitKey(33) & 0xFF
+        key = cv2.waitKey(1) & 0xFF
         if key == ord('s'):
             running = True
             integral = 0.0
@@ -237,6 +277,7 @@ def startup():
 
     send(vx=0.0, vyaw=0.0)
     cv2.destroyAllWindows()
+    stop_event.set()
     cam.destroy_node()
     rclpy.shutdown()
 

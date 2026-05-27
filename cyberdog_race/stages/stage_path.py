@@ -13,7 +13,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from utils.camera_subscriber import CameraSubscriber
 
 # 黄线HSV范围
-YELLOW_LOW  = np.array([20, 100, 100])
+YELLOW_LOW  = np.array([25, 80,  200])
 YELLOW_HIGH = np.array([35, 255, 255])
 
 # PID参数
