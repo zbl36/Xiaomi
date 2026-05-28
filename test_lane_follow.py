@@ -101,13 +101,13 @@ def find_yellow(frame):
         # 双边线：取两线中点，走中间
         lane = (lx + (w//2 + rx)) / 2.0
     elif rx is not None:
-        # 只看到右线：右线应该在画面更右侧
+        # 只看到右线：右线应该在画面最右侧
         actual_rx = w//2 + rx
-        target_rx = w * 4 // 5  # 从3/4改为4/5，让机器狗更远离右线
+        target_rx = w * 9 // 10  # 从4/5改为9/10，更远离右线
         lane = w/2.0 + (actual_rx - target_rx)
     else:
-        # 只看到左线：左线应该在画面更左侧
-        target_lx = w // 5  # 从1/4改为1/5，让机器狗更远离左线
+        # 只看到左线：左线应该在画面最左侧
+        target_lx = w // 10  # 从1/5改为1/10，更远离左线
         lane = w/2.0 + (lx - target_lx)
 
     return lane - w / 2.0
