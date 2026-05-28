@@ -27,6 +27,11 @@ Kp          = 0.010
 VX          = 0.15
 VYAW_MAX    = 1.0
 
+# 斜坡检测 HSV 范围（亮灰色，V高S低）
+SLOPE_LOW   = np.array([70, 0, 90])
+SLOPE_HIGH  = np.array([120, 50, 140])
+SLOPE_AREA_THRESH = 5000  # 斜坡面积阈值（像素）
+
 # ── LCM 直接发送 ──────────────────────────────────────────
 LCM_URL = "udpm://239.255.76.67:7671?ttl=255"
 lc = lcm.LCM(LCM_URL)
@@ -141,7 +146,18 @@ def main():
             # 取最新帧
             frame = frame_now.copy()
 
-            # 检测
+            # 检测斜坡（画面下方1/5）
+            h, w = frame.shape[:2]
+            slope_roi = frame[h*4//5:, :]
+            slope_hsv = cv2.cvtColor(slope_roi, cv2.COLOR_BGR2HSV)
+            slope_mask = cv2.inRange(slope_hsv, SLOPE_LOW, SLOPE_HIGH)
+            slope_area = cv2.countNonZero(slope_mask)
+            if slope_area > SLOPE_AREA_THRESH:
+                cmd(11, 9, vx=0.0, vyaw=0.0)
+                print(f'\n\nS弯结束！检测到斜坡（面积={slope_area}），停止。')
+                break
+
+            # 检测黄线
             err = find_yellow(frame)
 
             # 控制
