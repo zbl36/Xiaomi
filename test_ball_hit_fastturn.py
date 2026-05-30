@@ -174,7 +174,7 @@ def align_yaw(target_yaw=math.pi/2, tolerance=0.017):
             return
     print(f"\n  当前yaw={math.degrees(current_yaw):.1f}°")
 
-    Kp = 0.8
+    Kp = 1.2
     stable_start = None
     while True:
         err = target_yaw - current_yaw
@@ -184,13 +184,13 @@ def align_yaw(target_yaw=math.pi/2, tolerance=0.017):
         if abs(err) < tolerance:
             if stable_start is None:
                 stable_start = time.time()
-            elif time.time() - stable_start > 3.0:
+            elif time.time() - stable_start > 1.5:
                 cmd(11, 9, vx=0.0)
                 break
             cmd(11, 9, vx=0.0, vyaw=0.0)
         else:
             stable_start = None
-            vyaw = max(-0.4, min(0.4, Kp * err))
+            vyaw = max(-0.7, min(0.7, Kp * err))
             cmd(11, 9, vx=0.0, vyaw=vyaw)
 
         print(f'\r  转向: yaw={math.degrees(current_yaw):.1f}° '
@@ -356,7 +356,7 @@ def walk_until_yellow(heading=math.pi/2, max_hits=99, swing=False):
                 while err < -math.pi: err += 2*math.pi
                 if abs(err) < math.radians(5):
                     break
-                vyaw = 0.7 if err > 0 else -0.7
+                vyaw = 1.0 if err > 0 else -1.0
                 cmd(11, 9, vx=0.0, vyaw=vyaw)
                 time.sleep(0.05)
             if target == heading and not found_in_swing:
@@ -435,7 +435,7 @@ def turn_left_90():
 def walk_to_yellow_simple():
     """直走直到底部检测到黄线，每走6秒右平移1秒修正偏左"""
     print("  直走，等待底部黄线...")
-    walk_duration = 8.0
+    walk_duration = 6.0
     shift_duration = 1.0
 
     while True:
@@ -671,82 +671,9 @@ def main():
         print("  对齐Y轴正向，进入S弯")
         align_yaw(target_yaw=math.pi/2, tolerance=0.017)
 
-        # ── 赛段三：S弯黄线跟踪 ──
-        print("\n" + "="*40)
-        print("赛段三：S弯黄线跟踪")
-        print("="*40)
-
-        SLOPE_LOW = np.array([70, 0, 90])
-        SLOPE_HIGH = np.array([120, 50, 140])
-        SLOPE_AREA_THRESH = 5000
-        Kp_lane = 0.010
-        VX_LANE = 0.15
-        VYAW_MAX_LANE = 1.0
-
-        def find_yellow_lane(frame):
-            h, w = frame.shape[:2]
-            roi = frame[h * 2 // 3:, :]
-            hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
-            mask = cv2.inRange(hsv, YELLOW_LOW, YELLOW_HIGH)
-            mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((5,5), np.uint8))
-            left_mask = mask[:, :w//2]
-            right_mask = mask[:, w//2:]
-
-            def cx(m):
-                c, _ = cv2.findContours(m, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-                if not c: return None
-                big = max(c, key=cv2.contourArea)
-                if cv2.contourArea(big) < 1000: return None
-                M = cv2.moments(big)
-                return M['m10']/M['m00'] if M['m00'] else None
-
-            lx = cx(left_mask)
-            rx = cx(right_mask)
-
-            if lx is None and rx is None:
-                return None
-            if lx is not None and rx is not None:
-                lane = (lx + (w//2 + rx)) / 2.0
-            elif rx is not None:
-                actual_rx = w//2 + rx
-                target_rx = w * 9 // 10
-                lane = w/2.0 + (actual_rx - target_rx)
-            else:
-                target_lx = w // 10
-                lane = w/2.0 + (lx - target_lx)
-            return lane - w / 2.0
-
-        while True:
-            frame = wait_frame()
-            h, w = frame.shape[:2]
-
-            # 检测斜坡（S弯结束）
-            slope_roi = frame[h*4//5:, :]
-            slope_hsv = cv2.cvtColor(slope_roi, cv2.COLOR_BGR2HSV)
-            slope_mask = cv2.inRange(slope_hsv, SLOPE_LOW, SLOPE_HIGH)
-            slope_area = cv2.countNonZero(slope_mask)
-            if slope_area > SLOPE_AREA_THRESH:
-                cmd(11, 9, vx=0.0, vyaw=0.0)
-                print(f'\n\nS弯结束！检测到斜坡（面积={slope_area}），停止。')
-                break
-
-            err = find_yellow_lane(frame)
-            if err is not None:
-                vyaw = -(Kp_lane * err)
-                vyaw = max(-VYAW_MAX_LANE, min(VYAW_MAX_LANE, vyaw))
-                if abs(err) > 100:
-                    cmd(11, 9, vx=0.05, vyaw=vyaw)
-                else:
-                    cmd(11, 9, vx=VX_LANE, vyaw=vyaw)
-                print(f'\r  S弯: err={err:.1f} vyaw={vyaw:.3f}', end='', flush=True)
-            else:
-                cmd(11, 9, vx=-0.1, vyaw=0.0)
-                print(f'\r  S弯: NO LINE - BRAKE    ', end='', flush=True)
-            time.sleep(0.05)
-
         # ── 完成 ──
         print("\n" + "="*40)
-        print("赛段二+三完成！")
+        print("赛段二完成！准备进入S弯")
         print("="*40)
 
     except KeyboardInterrupt:

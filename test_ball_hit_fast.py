@@ -35,7 +35,7 @@ import math
 # ── 参数 ───────────────────────────────────────────────────
 # 橙色球 HSV（包含蓝色球用于对称检测）
 ORANGE_LOW  = np.array([5, 150, 60])
-ORANGE_HIGH = np.array([18, 255, 150])
+ORANGE_HIGH = np.array([18, 255, 255])
 BLUE_LOW    = np.array([95, 100, 50])
 BLUE_HIGH   = np.array([115, 255, 200])
 
@@ -43,11 +43,11 @@ BLUE_HIGH   = np.array([115, 255, 200])
 YELLOW_LOW  = np.array([25, 80, 200])
 YELLOW_HIGH = np.array([35, 255, 255])
 
-# 控制参数
+# 控制参数（加速版）
 Kp_yaw      = 0.008
-VX          = 0.15    # 前进速度
-VX_HIT      = 0.30    # 撞击速度
-VY_SHIFT    = 0.12    # 平移速度
+VX          = 0.25    # 前进速度（原0.15）
+VX_HIT      = 0.35    # 撞击速度（原0.30）
+VY_SHIFT    = 0.18    # 平移速度（原0.12）
 VYAW_MAX    = 0.5
 PITCH       = 0.30    # 前倾
 
@@ -184,7 +184,7 @@ def align_yaw(target_yaw=math.pi/2, tolerance=0.017):
         if abs(err) < tolerance:
             if stable_start is None:
                 stable_start = time.time()
-            elif time.time() - stable_start > 3.0:
+            elif time.time() - stable_start > 1.5:
                 cmd(11, 9, vx=0.0)
                 break
             cmd(11, 9, vx=0.0, vyaw=0.0)
@@ -258,7 +258,7 @@ def shift_to_center(direction='left'):
                 # 对称条件：左右最近球到中心距离差<30px 且 avg偏移合理
                 if diff < 30 and abs(err) < 50:
                     stable_count += 1
-                    if stable_count > 10:
+                    if stable_count > 6:
                         print("\n  居中完成！")
                         rev_vy = -vy
                         for _ in range(int(0.5 / 0.05)):
@@ -282,7 +282,7 @@ def shift_to_center(direction='left'):
 
         time.sleep(0.05)
 
-    for _ in range(10):
+    for _ in range(5):
         cmd(11, 9, vx=0.0)
         time.sleep(0.1)
 
@@ -392,7 +392,7 @@ def walk_until_yellow(heading=math.pi/2, max_hits=99, swing=False):
                     cmd(11, 9, vx=VX, vyaw=0.0)
                     time.sleep(0.05)
                 cmd(11, 9, vx=0.0)
-                for _ in range(10):
+                for _ in range(5):
                     cmd(11, 9, vx=0.0)
                     time.sleep(0.1)
                 return hit_count
@@ -404,7 +404,7 @@ def walk_until_yellow(heading=math.pi/2, max_hits=99, swing=False):
 def recover_after_hit(side, target_yaw=math.pi/2):
     """撞击后恢复方向，然后平移回居中"""
     # 停止
-    for _ in range(10):
+    for _ in range(5):
         cmd(11, 9, vx=0.0)
         time.sleep(0.1)
 
@@ -433,9 +433,9 @@ def turn_left_90():
 
 
 def walk_to_yellow_simple():
-    """直走直到底部检测到黄线，每走6秒右平移1秒修正偏左"""
+    """直走直到底部检测到黄线，每走4秒右平移1秒修正偏左"""
     print("  直走，等待底部黄线...")
-    walk_duration = 8.0
+    walk_duration = 4.0
     shift_duration = 1.0
 
     while True:
@@ -471,7 +471,7 @@ def shift_until_no_yellow():
         if not detect_yellow_bottom(frame):
             cmd(11, 9, vx=0.0)
             print("  底部黄线消失，到达S弯入口")
-            for _ in range(10):
+            for _ in range(5):
                 cmd(11, 9, vx=0.0)
                 time.sleep(0.1)
             return
@@ -505,7 +505,7 @@ def walk_along_right_yellow():
             if not has_bottom:
                 cmd(11, 9, vx=0.0)
                 print("  黄线消失，停止")
-                for _ in range(10):
+                for _ in range(5):
                     cmd(11, 9, vx=0.0)
                     time.sleep(0.1)
                 return
@@ -534,7 +534,7 @@ def shift_left(sec=2.0):
     for _ in range(int(sec / 0.05)):
         cmd(11, 9, vx=0.0, vy=VY_SHIFT)
         time.sleep(0.05)
-    for _ in range(10):
+    for _ in range(5):
         cmd(11, 9, vx=0.0)
         time.sleep(0.1)
 
@@ -545,7 +545,7 @@ def shift_right(sec=2.0):
     for _ in range(int(sec / 0.05)):
         cmd(11, 9, vx=0.0, vy=-VY_SHIFT)
         time.sleep(0.05)
-    for _ in range(10):
+    for _ in range(5):
         cmd(11, 9, vx=0.0)
         time.sleep(0.1)
 
@@ -574,7 +574,7 @@ def main():
         cmd(11, 9, vx=0.05)
         time.sleep(0.05)
     # 停下来
-    for _ in range(10):
+    for _ in range(5):
         cmd(11, 9, vx=0.0)
         time.sleep(0.1)
     while current_yaw is None:
@@ -633,10 +633,10 @@ def main():
         print("\n[阶段5] 对齐Y轴正向 + 走到底部黄线 + 进入S弯")
         align_yaw(target_yaw=math.pi/2, tolerance=0.017)
         walk_to_yellow_simple()
-        # 检测到黄线后再走3秒
-        print("  再走3秒...")
+        # 检测到黄线后再走2秒
+        print("  再走2秒...")
         t0 = time.time()
-        while time.time() - t0 < 3.0:
+        while time.time() - t0 < 2.0:
             cmd(11, 9, vx=VX, vyaw=0.0)
             time.sleep(0.05)
         cmd(11, 9, vx=0.0)
@@ -661,7 +661,7 @@ def main():
                 if not has_y:
                     cmd(11, 9, vx=0.0)
                     print("  黄线消失，停止")
-                    for _ in range(10):
+                    for _ in range(5):
                         cmd(11, 9, vx=0.0)
                         time.sleep(0.1)
                     break
@@ -671,82 +671,9 @@ def main():
         print("  对齐Y轴正向，进入S弯")
         align_yaw(target_yaw=math.pi/2, tolerance=0.017)
 
-        # ── 赛段三：S弯黄线跟踪 ──
-        print("\n" + "="*40)
-        print("赛段三：S弯黄线跟踪")
-        print("="*40)
-
-        SLOPE_LOW = np.array([70, 0, 90])
-        SLOPE_HIGH = np.array([120, 50, 140])
-        SLOPE_AREA_THRESH = 5000
-        Kp_lane = 0.010
-        VX_LANE = 0.15
-        VYAW_MAX_LANE = 1.0
-
-        def find_yellow_lane(frame):
-            h, w = frame.shape[:2]
-            roi = frame[h * 2 // 3:, :]
-            hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
-            mask = cv2.inRange(hsv, YELLOW_LOW, YELLOW_HIGH)
-            mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((5,5), np.uint8))
-            left_mask = mask[:, :w//2]
-            right_mask = mask[:, w//2:]
-
-            def cx(m):
-                c, _ = cv2.findContours(m, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-                if not c: return None
-                big = max(c, key=cv2.contourArea)
-                if cv2.contourArea(big) < 1000: return None
-                M = cv2.moments(big)
-                return M['m10']/M['m00'] if M['m00'] else None
-
-            lx = cx(left_mask)
-            rx = cx(right_mask)
-
-            if lx is None and rx is None:
-                return None
-            if lx is not None and rx is not None:
-                lane = (lx + (w//2 + rx)) / 2.0
-            elif rx is not None:
-                actual_rx = w//2 + rx
-                target_rx = w * 9 // 10
-                lane = w/2.0 + (actual_rx - target_rx)
-            else:
-                target_lx = w // 10
-                lane = w/2.0 + (lx - target_lx)
-            return lane - w / 2.0
-
-        while True:
-            frame = wait_frame()
-            h, w = frame.shape[:2]
-
-            # 检测斜坡（S弯结束）
-            slope_roi = frame[h*4//5:, :]
-            slope_hsv = cv2.cvtColor(slope_roi, cv2.COLOR_BGR2HSV)
-            slope_mask = cv2.inRange(slope_hsv, SLOPE_LOW, SLOPE_HIGH)
-            slope_area = cv2.countNonZero(slope_mask)
-            if slope_area > SLOPE_AREA_THRESH:
-                cmd(11, 9, vx=0.0, vyaw=0.0)
-                print(f'\n\nS弯结束！检测到斜坡（面积={slope_area}），停止。')
-                break
-
-            err = find_yellow_lane(frame)
-            if err is not None:
-                vyaw = -(Kp_lane * err)
-                vyaw = max(-VYAW_MAX_LANE, min(VYAW_MAX_LANE, vyaw))
-                if abs(err) > 100:
-                    cmd(11, 9, vx=0.05, vyaw=vyaw)
-                else:
-                    cmd(11, 9, vx=VX_LANE, vyaw=vyaw)
-                print(f'\r  S弯: err={err:.1f} vyaw={vyaw:.3f}', end='', flush=True)
-            else:
-                cmd(11, 9, vx=-0.1, vyaw=0.0)
-                print(f'\r  S弯: NO LINE - BRAKE    ', end='', flush=True)
-            time.sleep(0.05)
-
         # ── 完成 ──
         print("\n" + "="*40)
-        print("赛段二+三完成！")
+        print("赛段二完成！准备进入S弯")
         print("="*40)
 
     except KeyboardInterrupt:
